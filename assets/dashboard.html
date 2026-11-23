@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetMeter</title>
+<style>
+:root{--bg:#101113;--card:#1d1f22;--high:#26292d;--line:#2e3136;--text:#edeef0;--muted:#9ba0a8;--accent:#3b8bff;--ok:#34c759;--warn:#ffb020;--bad:#ff5c5c}
+@media (prefers-color-scheme: light){:root{--bg:#f3f4f6;--card:#fff;--high:#eceef1;--line:#dcdfe4;--text:#16181b;--muted:#5d646d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+main{max-width:1060px;margin:0 auto;padding:20px 16px 40px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:22px;margin:0;flex:1}
+.pill{padding:4px 12px;border-radius:99px;font-size:12px;font-weight:600;background:var(--high);color:var(--muted)}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.bad{color:var(--bad)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-bottom:12px}
+.card{background:var(--card);border-radius:18px;padding:14px 16px}
+.card h2{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px}
+.big{font-size:28px;font-weight:700}
+.sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+.wide{grid-column:1/-1}
+canvas{width:100%;height:170px;display:block}
+.bar{height:8px;background:var(--high);border-radius:6px;overflow:hidden;margin:10px 0 4px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.row{display:flex;align-items:center;gap:10px;margin:7px 0}
+.row .n{width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .b{flex:1;height:10px;background:var(--high);border-radius:6px;overflow:hidden}
+.row .b i{display:block;height:100%;background:var(--accent)}
+.row .v{width:80px;text-align:right;color:var(--muted);font-size:12.5px}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;padding:6px 8px}
+td{padding:8px;border-top:1px solid var(--line);vertical-align:middle}
+input,select,button{font:inherit;color:var(--text);background:var(--high);border:1px solid transparent;border-radius:10px;padding:6px 10px}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+button{cursor:pointer;background:var(--accent);color:#fff;font-weight:600;border-radius:99px;padding:7px 16px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:6px}
+.dot.on{background:var(--ok)}
+.note{color:var(--muted);font-size:12.5px;margin-top:10px}
+@media (max-width:640px){.row .n{width:100px}.hide-s{display:none}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>NetMeter</h1><span class="pill" id="status">…</span><span class="pill" id="period"></span><button id="export">Export CSV</button></header>
+<div id="err" class="card" style="display:none;margin-bottom:12px"></div>
+<div class="grid">
+  <div class="card"><h2>Router, today</h2><div class="big" id="today">–</div><div class="sub" id="todaySub"></div><div class="sub" id="rate"></div></div>
+  <div class="card"><h2>This period</h2><div class="big" id="periodV">–</div><div class="sub" id="periodSub"></div></div>
+  <div class="card"><h2>This PC</h2><div class="big" id="pc">–</div><div class="sub" id="pcSub"></div></div>
+  <div class="card" id="quotaCard"><h2>Allowance</h2><div class="big" id="quota">–</div><div class="bar"><i id="quotaBar" style="width:0"></i></div><div class="sub" id="quotaSub"></div></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>Router usage by hour, today</h2><canvas id="hourly"></canvas></div>
+  <div class="card"><h2>Router usage, last 30 days</h2><canvas id="days"></canvas></div>
+</div>
+<div class="grid">
+  <div class="card wide"><h2>Router usage by month</h2><canvas id="months"></canvas></div>
+</div>
+<div class="grid">
+  <div class="card wide"><h2 id="topTitle">Most active devices this period</h2><div id="top"></div></div>
+</div>
+<div class="card wide">
+  <h2>Devices</h2>
+  <table><thead><tr><th></th><th>Name</th><th>Category</th><th class="hide-s">Address</th><th>Online today</th><th class="hide-s">Online this period</th><th class="hide-s" id="usageH">Usage today</th></tr></thead><tbody id="devs"></tbody></table>
+  <div class="note" id="note"></div>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function bytes(b){const u=['B','KB','MB','GB','TB'];let i=0,v=b;while(v>=1024&&i<4){v/=1024;i++}return (v>=100||i==0?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2))+' '+u[i]}
+function span(s){if(s<60)return s+'s';const m=Math.floor(s/60);return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m'}
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function bars(cv,vals,labels,fmt){
+  const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;cv.width=w*dpr;cv.height=h*dpr;
+  const g=cv.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,w,h);
+  const max=Math.max(1,...vals),lh=16,ch=h-lh-14,slot=w/vals.length;
+  g.fillStyle=css('--muted');g.font='11px Segoe UI, sans-serif';g.fillText('max '+fmt(max),0,10);
+  vals.forEach((v,i)=>{const bh=v?Math.max(3,v/max*ch):3;g.fillStyle=v?css('--accent'):css('--high');
+    const x=i*slot+slot*.15,bw=slot*.7;g.beginPath();g.roundRect?g.roundRect(x,14+ch-bh,bw,bh,3):g.rect(x,14+ch-bh,bw,bh);g.fill();
+    if(labels[i]!=null){g.fillStyle=css('--muted');g.textAlign='center';g.fillText(labels[i],x+bw/2,h-3);g.textAlign='left'}});
+}
+let state=null,editing=false;
+function render(s){
+  state=s;const st=$('status');st.textContent={connected:'Connected',connecting:'Connecting',blocked:'Paused',offline:'Router unreachable',error:'Error',setup:'Set up needed'}[s.status]||s.status;
+  st.className='pill '+({connected:'ok',connecting:'warn',offline:'warn',blocked:'bad',error:'bad'}[s.status]||'warn');
+  $('period').textContent='Period since '+s.periodStart;
+  const e=$('err');e.style.display=s.status!=='connected'&&s.error?'block':'none';e.textContent=s.error||'';
+  $('today').textContent=bytes(s.today.down+s.today.up);$('todaySub').textContent='Down '+bytes(s.today.down)+'   Up '+bytes(s.today.up);
+  $('rate').textContent='Now: down '+bytes(s.rate.down)+'/s, up '+bytes(s.rate.up)+'/s';
+  $('periodV').textContent=bytes(s.period.down+s.period.up);$('periodSub').textContent='Down '+bytes(s.period.down)+'   Up '+bytes(s.period.up);
+  $('pc').textContent=bytes(s.pc.today);$('pcSub').textContent=bytes(s.pc.period)+' this period';
+  const q=s.quota;
+  if(q.cap>0){$('quota').textContent=bytes(q.used)+' of '+bytes(q.cap);$('quotaBar').style.width=Math.min(100,q.used/q.cap*100)+'%';
+    $('quotaBar').style.background=q.used>=q.cap?css('--bad'):q.projected>q.cap?css('--warn'):css('--accent');
+    $('quotaSub').textContent='At this pace: '+bytes(q.projected)+' by the end of the period'+(q.projected>q.cap?' (over the allowance)':'')}
+  else{$('quota').textContent='Not set';$('quotaBar').style.width='0';$('quotaSub').textContent='Set a monthly allowance in the app settings to see a forecast.'}
+  bars($('hourly'),s.hourly,s.hourly.map((_,i)=>i%3==0?i:null),bytes);
+  bars($('days'),s.days.map(d=>d.bytes),s.days.map((d,i)=>i%5==4||i==s.days.length-1?+d.date.slice(8):null),bytes);
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  bars($('months'),s.months.map(m=>m.bytes),s.months.map(m=>MN[+m.start.slice(5,7)-1]),bytes);
+  const usage=s.perDeviceUsage;$('topTitle').textContent=usage?'Heaviest devices this period':'Most active devices this period (connection time)';
+  const ds=s.devices.slice().sort((a,b)=>usage?b.bytesPeriod-a.bytesPeriod:b.secsPeriod-a.secsPeriod).filter(d=>(usage?d.bytesPeriod:d.secsPeriod)>0).slice(0,8);
+  const mx=Math.max(1,...ds.map(d=>usage?d.bytesPeriod:d.secsPeriod));
+  $('top').innerHTML=ds.map(d=>{const v=usage?d.bytesPeriod:d.secsPeriod;return '<div class="row"><span class="n">'+esc(d.display)+'</span><span class="b"><i style="width:'+(v/mx*100)+'%"></i></span><span class="v">'+(usage?bytes(v):span(v))+'</span></div>'}).join('')||'<div class="sub">No data yet.</div>';
+  $('usageH').textContent=usage?'Usage today':'Usage today (this PC only)';
+  if(!editing){
+    const order=s.devices.slice().sort((a,b)=>(b.online-a.online)||a.display.localeCompare(b.display));
+    $('devs').innerHTML=order.map(d=>'<tr data-mac="'+d.mac+'"><td><span class="dot'+(d.online?' on':'')+'"></span></td>'+
+      '<td><input value="'+esc(d.name)+'" placeholder="'+esc(d.host||d.mac)+'" data-f="name" maxlength="40">'+(d.local?' <span class="sub">this PC</span>':'')+'</td>'+
+      '<td><select data-f="category"><option value=""></option>'+s.categories.map(c=>'<option'+(c===d.category?' selected':'')+'>'+c+'</option>').join('')+'</select></td>'+
+      '<td class="hide-s">'+esc(d.ip)+' <span class="sub">'+esc(d.conn)+'</span></td><td>'+span(d.secsToday)+'</td><td class="hide-s">'+span(d.secsPeriod)+'</td>'+
+      '<td class="hide-s">'+(usage||d.local?bytes(d.bytesToday):'–')+'</td></tr>').join('');
+    $('note').textContent=usage?'':'This router does not report traffic per device, so devices show connection time. This PC shows its own measured traffic.';
+  }
+}
+async function load(){try{const r=await fetch('/api/state',{cache:'no-store'});render(await r.json())}catch(e){$('status').textContent='App not running';$('status').className='pill bad'}}
+document.addEventListener('focusin',e=>{if(e.target.closest('#devs'))editing=true});
+document.addEventListener('focusout',e=>{if(e.target.closest('#devs'))setTimeout(()=>{editing=false},300)});
+$('devs').addEventListener('change',async e=>{const tr=e.target.closest('tr');if(!tr)return;
+  const body={mac:tr.dataset.mac,[e.target.dataset.f]:e.target.value};
+  const r=await fetch('/api/device',{method:'POST',headers:{'Content-Type':'application/json','X-NetMeter':'1'},body:JSON.stringify(body)});
+  editing=false;render(await r.json())});
+$('export').onclick=async()=>{const r=await fetch('/api/export',{method:'POST',headers:{'X-NetMeter':'1'}});const j=await r.json();alert('CSV files saved to '+j.folder)};
+window.addEventListener('resize',()=>state&&render(state));
+load();setInterval(load,5000);
+</script>
+</body>
+</html>

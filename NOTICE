@@ -1,4 +1,4 @@
-NetMeter (اینترنت‌متر)
+NetMeter
 Copyright (C) 2026 NetMeter contributors
 License: GNU General Public License v2.0 or later (GPL-2.0-or-later)
 
@@ -13,32 +13,23 @@ General Public License for more details: https://www.gnu.org/licenses/old-licens
 Third-party components and prior art
 -------------------------------------------------------------------------------
 
-1) CPE-Monitor — https://github.com/DrADCalcium/CPE-Monitor
+1) CPE-Monitor - https://github.com/DrADCalcium/CPE-Monitor
    License: GPL-2.0-or-later
-   Use: the Huawei HiLink SCRAM login flow in netmeter/routers/huawei.py
+   Use: the Huawei HiLink SCRAM login flow in lib/core/huawei_client.dart
    (challenge_login / authentication_login, PBKDF2-HMAC-SHA256 parameters,
    client proof and server signature verification, CSRF token rotation,
-   error-code handling) is a Python port of that project's src/router.rs.
+   error-code handling) is a Dart port of that project's src/router.rs.
    Because of this, NetMeter as a whole is distributed under GPL-2.0-or-later.
+   The port is checked against the router's own CryptoJS code in
+   test/scram_test.dart.
 
-2) PLDT H153 traffic monitor — https://github.com/ardzeyFTW/...
+2) huawei-lte-api-rs - https://github.com/lvcdy/huawei-lte-api-rs
    License: MIT
-   Use: reference for the overall architecture (background poller + SQLite +
-   local dashboard + CSV export), not copied verbatim.
+   Use: reference for the fields of the router's host table (system/HostInfo).
 
-3) huawei-lte-api-rs — https://github.com/lvcdy/huawei-lte-api-rs
-   License: MIT
-   Use: field naming reference for the `system/HostInfo` per-device response
-   (MACAddress, ActualName, IPAddress, InterfaceType, TxKBytes, RxKBytes,
-   UpRate, DownRate, Active).
+3) UI building blocks (theme, cards, rail navigation, tray and window handling,
+   DPAPI helper) come from "GPU Lend", an app by the same author. The author
+   releases those parts under GPL-2.0-or-later for use in NetMeter.
 
-4) huawei-lte-api (Python) — https://github.com/Salamek/huawei-lte-api
-   License: MIT
-   Use: endpoint naming reference for Huawei HiLink APIs.
-
-5) Huawei device WebUI assets (main.js, emui-crypto.js) were inspected locally
-   on the owner's own device solely to confirm the request format and the
-   CryptoJS SCRAM implementation. No vendor code is redistributed here.
-
-Trademarks: Huawei, HiLink, 5G CPE are trademarks of their respective owners.
-This project is not affiliated with or endorsed by Huawei.
+4) Flutter packages: window_manager, tray_manager, launch_at_startup, crypto,
+   ffi, path (BSD/MIT licensed; see pubspec.yaml).
