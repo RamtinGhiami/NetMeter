@@ -10,6 +10,10 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4)
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)
 
+![داشبورد NetMeter](docs/dashboard.jpg)
+
+> تصویر: حالت نمایشی (داده‌های نمونه) برای دیدن ظاهر برنامه.
+
 ## دانلود و نصب
 
 آخرین نسخه‌ی نصبی را از [Releases](../../releases/latest) بگیر
