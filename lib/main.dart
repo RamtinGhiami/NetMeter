@@ -15,7 +15,7 @@ import 'core/web_server.dart';
 import 'ui/shell.dart';
 import 'ui/theme.dart';
 
-const appVersion = '0.4.0';
+const appVersion = '0.4.1';
 const _instancePort = 47853; // single-instance socket (not shared with any other app)
 
 Future<void> main(List<String> args) async {

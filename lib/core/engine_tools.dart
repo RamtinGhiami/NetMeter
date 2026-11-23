@@ -71,10 +71,10 @@ extension EngineTools on Engine {
     void addDay(DayStat d) {
       down += d.wanRx;
       up += d.wanTx;
-      pc += d.pcRx + d.pcTx;
+      pc += capToRouter(d.pcRx, d.wanRx) + capToRouter(d.pcTx, d.wanTx);
       d.dev.forEach((mac, v) {
         devSecs[mac] = (devSecs[mac] ?? 0) + v.secs;
-        devBytes[mac] = (devBytes[mac] ?? 0) + v.rx + v.tx;
+        devBytes[mac] = (devBytes[mac] ?? 0) + capToRouter(v.rx, d.wanRx) + capToRouter(v.tx, d.wanTx);
       });
     }
 

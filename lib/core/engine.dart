@@ -178,6 +178,11 @@ class Engine extends ChangeNotifier {
     } else if (rx < 0 || tx < 0) {
       return;
     }
+    if (_ownDebt > 0) {
+      final cut = rx < _ownDebt ? rx : _ownDebt;
+      rx -= cut;
+      _ownDebt -= cut;
+    }
     if (rx > _maxStep || tx > _maxStep) return;
     final day = store.day(now);
     day.pcRx += rx;
@@ -264,6 +269,10 @@ class Engine extends ChangeNotifier {
   // ---- per-device estimate from short packet captures --------------------------------------------------------
 
   bool _sampling = false;
+
+  /// Bytes of the capture download that this PC's adapter has counted or is about to count. They travel from the router to this PC
+  /// over the LAN, are not internet traffic, and must not be added to "This PC".
+  int _ownDebt = 0;
   DateTime? _lastSample;
   DateTime? _sampleBackoffUntil;
   int _sampleFails = 0;
@@ -288,7 +297,10 @@ class Engine extends ChangeNotifier {
     if (parts.length != 4) return;
     final counter = PcapCounter(lanPrefix24: (parts[0] << 16) | (parts[1] << 8) | parts[2]);
     try {
-      await client.capture(const Duration(seconds: 20), counter.add, abort: () => counter.full);
+      await client.capture(const Duration(seconds: 20), (chunk) {
+        counter.add(chunk);
+        _ownDebt += (chunk.length * 1.05).round(); // a little extra for the TCP and IP headers
+      }, abort: () => counter.full);
       _lastSample = DateTime.now();
       _sampleFails = 0;
       _share(counter);
@@ -297,6 +309,7 @@ class Engine extends ChangeNotifier {
       _sampleFails++;
       final wait = Duration(minutes: (1 << _sampleFails.clamp(1, 5)).clamp(2, 30));
       _sampleBackoffUntil = DateTime.now().add(wait);
+      _ownDebt = 0;
       log('capture sample failed ($_sampleFails): $e; next try in ${wait.inMinutes} min');
       if (_sampleFails == 3) notice = 'Per-device estimates are not working on this router: $e';
     }
@@ -408,7 +421,7 @@ class Engine extends ChangeNotifier {
 
   /// Sum over the days from [from] (inclusive) to today.
   (int, int) sumWan(DateTime from) => _sum(from, (d) => (d.wanRx, d.wanTx));
-  (int, int) sumPc(DateTime from) => _sum(from, (d) => (d.pcRx, d.pcTx));
+  (int, int) sumPc(DateTime from) => _sum(from, (d) => (capToRouter(d.pcRx, d.wanRx), capToRouter(d.pcTx, d.wanTx)));
 
   (int, int) _sum(DateTime from, (int, int) Function(DayStat) pick) {
     var rx = 0, tx = 0;
@@ -446,14 +459,24 @@ class Engine extends ChangeNotifier {
         final dd = v.dev[mac];
         if (dd != null) {
           secsPeriod += dd.secs;
-          bytesPeriod += dd.rx + dd.tx;
+          bytesPeriod += capToRouter(dd.rx, v.wanRx) + capToRouter(dd.tx, v.wanTx);
         }
       }
     });
     final t = store.days[dayKey(DateTime.now())]?.dev[mac];
-    return (secsToday: t?.secs ?? 0, secsPeriod: secsPeriod, bytesToday: (t?.rx ?? 0) + (t?.tx ?? 0), bytesPeriod: bytesPeriod);
+    final td = store.days[dayKey(DateTime.now())];
+    return (
+      secsToday: t?.secs ?? 0,
+      secsPeriod: secsPeriod,
+      bytesToday: capToRouter(t?.rx ?? 0, td?.wanRx ?? 0) + capToRouter(t?.tx ?? 0, td?.wanTx ?? 0),
+      bytesPeriod: bytesPeriod,
+    );
   }
 }
+
+/// A PC or a device cannot use more internet than the router carried that day. The adapter counters also count traffic inside the
+/// LAN and frame overhead, so they are cut down to the router's number whenever the router has one.
+int capToRouter(int measured, int router) => router > 0 && measured > router ? router : measured;
 
 String formatBytes(num b) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
