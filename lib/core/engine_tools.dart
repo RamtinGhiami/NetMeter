@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'engine.dart';
 import 'huawei_client.dart';
+import 'platform_utils.dart';
 import 'store.dart';
 
 extension EngineTools on Engine {
@@ -75,9 +76,8 @@ extension EngineTools on Engine {
 
   /// Writes two CSV files (per day, and per device and day) to Documents\NetMeter and returns the folder.
   String exportCsv() {
-    final home = Platform.environment['USERPROFILE'] ?? dataDir().path;
     final sep = Platform.pathSeparator;
-    final dir = Directory('$home${sep}Documents${sep}NetMeter')..createSync(recursive: true);
+    final dir = Directory('${documentsDir()}${sep}NetMeter')..createSync(recursive: true);
     final keys = store.days.keys.toList()..sort();
     final daily = StringBuffer('date,router_down_bytes,router_up_bytes,pc_down_bytes,pc_up_bytes\n');
     final perDev = StringBuffer('date,mac,name,category,online_minutes,down_bytes,up_bytes\n');

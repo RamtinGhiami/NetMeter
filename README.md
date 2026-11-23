@@ -42,10 +42,20 @@ H155-383 firmware fills them with zeros even while a device downloads at full sp
 The router also has a hidden packet capture tool (developer mode). Using it for continuous accounting is not
 implemented: captures are short and the router encrypts the request bodies of that page.
 
-## Install
+## Download and install
 
-Download `NetMeter-Setup-0.2.0.exe` from the [latest release](../../releases/latest) and run it. It installs for the
-current user only (no administrator rights) and adds a Start menu entry.
+Get the file for your system from the [latest release](../../releases/latest). The builds are made by GitHub Actions
+(see `.github/workflows/release.yml`) for Windows, Linux and macOS.
+
+| System | File | How |
+| --- | --- | --- |
+| **Windows 10 / 11** | `NetMeter-Setup-<version>.exe` | Run it. It installs for your user only (no administrator rights), adds a Start menu entry and can start with Windows. A portable `.zip` is also there. |
+| **Linux** (x86-64, GTK 3) | `NetMeter-<version>-linux-x64.tar.gz` | Unpack it and run `./install.sh`. Or in one step: `curl -fsSL https://raw.githubusercontent.com/RamtinGhiami/NetMeter/main/scripts/install-linux.sh \| bash`. The tray icon needs AppIndicator support (on GNOME, install the "AppIndicator" extension). |
+| **macOS** | `NetMeter-<version>-macos.dmg` (or `.zip`) | Open it and drag NetMeter to Applications. The app is not notarized: the first time, right-click it and choose Open, or run `xattr -dr com.apple.quarantine /Applications/NetMeter.app`. |
+
+Windows is the tested platform. The Linux and macOS builds compile from the same code but have had far less testing, so
+please report problems in the Issues tab. On Linux and macOS the router password is kept in the settings file, which is
+readable only by your user (Windows uses its built-in DPAPI encryption).
 
 Then open **Settings**, enter the router address (your gateway, for example `192.168.1.1`), the username and the
 password of the router's web panel, and press **Save and connect**.
@@ -56,21 +66,22 @@ password of the router's web panel, and press **Save and connect**.
 
 The router counts wrong passwords and then locks logins for several minutes. NetMeter therefore tries a wrong password
 **once** and then stops until you change the settings or press **Try again**. The password is stored encrypted with
-Windows DPAPI, for your Windows user only. NetMeter keeps one session open; opening the router's web panel in your
+Windows DPAPI, for your Windows user only (Linux and macOS: in the private settings file). NetMeter keeps one session open; opening the router's web panel in your
 browser signs NetMeter out, and it signs in again by itself.
 
 ## Where the data is
 
-`%APPDATA%\NetMeter` holds `config.json`, `history.json` (small; about 400 days are kept) and `netmeter.log`.
+`%APPDATA%\NetMeter` on Windows, `~/.config/NetMeter` on Linux and `~/Library/Application Support/NetMeter` on macOS hold `config.json`, `history.json` (small; about 400 days are kept) and `netmeter.log`.
 
 ## Build from source
 
-You need Flutter (stable, 3.47 or newer) with Windows desktop support.
+You need Flutter (stable, 3.47 or newer) with desktop support for your system. On Linux also install
+`libgtk-3-dev`, `libayatana-appindicator3-dev`, `libkeybinder-3.0-dev`, `clang`, `cmake` and `ninja-build`.
 
 ```powershell
 flutter pub get
 flutter test                       # checks the login maths against the router's own CryptoJS
-flutter build windows --release    # build\windows\x64\runner\Release\netmeter.exe
+flutter build windows --release    # or: flutter build linux --release / flutter build macos --release
 ```
 
 To build the installer, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run

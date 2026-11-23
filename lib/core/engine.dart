@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'engine_tools.dart';
 import 'huawei_client.dart';
 import 'store.dart';
-import 'windows_api.dart';
+import 'platform_utils.dart';
 
 const _maxStep = 50 * 1024 * 1024 * 1024; // a counter jump bigger than this between two polls is ignored
 const _wrap32 = 4294967296;
@@ -39,7 +39,7 @@ class Engine extends ChangeNotifier {
   WanStat? wan;
   List<HostRecord> hosts = [];
   String? notice;
-  int? _pcIndex;
+  NetworkInterface? _pcNic;
   bool pcSupported = true;
 
   Future<void> start() async {
@@ -142,32 +142,38 @@ class Engine extends ChangeNotifier {
 
   /// This PC's own traffic, from the Windows adapter counters of the adapter that is on the router's network.
   Future<void> _ensureAdapter() async {
-    if (!Platform.isWindows) return;
     try {
-      _pcIndex ??= await _findAdapter();
+      _pcNic ??= await _findAdapter();
     } catch (_) {}
   }
 
-  Future<int?> _findAdapter() async {
+  Future<NetworkInterface?> _findAdapter() async {
     final prefix = config.host.split('.').take(3).join('.');
     for (final nic in await NetworkInterface.list(type: InternetAddressType.IPv4)) {
-      if (nic.addresses.any((a) => a.address.startsWith('$prefix.'))) return nic.index;
+      if (nic.addresses.any((a) => a.address.startsWith('$prefix.'))) return nic;
     }
     return null;
   }
 
-  void _recordPc(DateTime now) {
-    final idx = _pcIndex;
-    if (idx == null) {
+  Future<void> _recordPc(DateTime now) async {
+    final nic = _pcNic;
+    if (nic == null) {
       pcSupported = false;
       return;
     }
-    final b = WindowsApi.adapterBytes(idx);
+    final b = await adapterBytes(nic);
     if (b == null) return;
     final last = (store.state['pc'] as List?)?.cast<int>();
     store.state['pc'] = [b.$1, b.$2];
     if (last == null) return;
-    final rx = (b.$1 - last[0]) % _wrap32, tx = (b.$2 - last[1]) % _wrap32;
+    // Windows counters are 32 bit and wrap; elsewhere a drop means the counters were reset
+    var rx = b.$1 - last[0], tx = b.$2 - last[1];
+    if (counters32) {
+      rx %= _wrap32;
+      tx %= _wrap32;
+    } else if (rx < 0 || tx < 0) {
+      return;
+    }
     if (rx > _maxStep || tx > _maxStep) return;
     final day = store.day(now);
     day.pcRx += rx;
@@ -183,7 +189,7 @@ class Engine extends ChangeNotifier {
 
   Future<void> _pollRouter() async {
     final now = DateTime.now();
-    _recordPc(now);
+    await _recordPc(now);
     if (config.password.isEmpty) {
       status = 'setup';
       error = 'Enter the router password in Settings';

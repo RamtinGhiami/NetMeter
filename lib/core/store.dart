@@ -3,18 +3,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'windows_api.dart';
+import 'platform_utils.dart';
 
 const categories = ['Phone', 'Computer', 'Tablet', 'TV', 'Console', 'Smart home', 'Guest', 'Other'];
 
 String dayKey(DateTime t) => '${t.year.toString().padLeft(4, '0')}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
 
-Directory dataDir() {
-  final override = Platform.environment['NETMETER_DATA']; // used by the demo mode and the tests
-  if (override != null && override.isNotEmpty) return Directory(override)..createSync(recursive: true);
-  final base = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
-  return Directory('$base${Platform.pathSeparator}NetMeter')..createSync(recursive: true);
-}
+Directory dataDir() => appDataDir();
 
 class Config {
   Config({this.host = '192.168.70.1', this.username = 'Admin', this.password = '', this.intervalSec = 20, this.resetDay = 1, this.autostart = true, this.quotaGb = 0});
@@ -35,13 +30,13 @@ class Config {
       c.autostart = j['autostart'] ?? c.autostart;
       c.quotaGb = (j['quotaGb'] ?? 0) as int;
       final enc = j['password'] as String?;
-      if (enc != null && enc.isNotEmpty) c.password = WindowsApi.unprotect(enc) ?? '';
+      if (enc != null && enc.isNotEmpty) c.password = unprotectSecret(enc) ?? '';
     } catch (_) {}
     return c;
   }
 
   void save() {
-    final enc = password.isEmpty ? '' : (WindowsApi.protect(password) ?? '');
+    final enc = password.isEmpty ? '' : (protectSecret(password) ?? '');
     _file.writeAsStringSync(jsonEncode({
       'host': host,
       'username': username,
@@ -51,6 +46,7 @@ class Config {
       'autostart': autostart,
       'quotaGb': quotaGb,
     }));
+    restrictToOwner(_file); // Linux/macOS: the file holds the password, keep it private
   }
 }
 

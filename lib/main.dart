@@ -10,11 +10,12 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/engine.dart';
+import 'core/platform_utils.dart';
 import 'core/web_server.dart';
 import 'ui/shell.dart';
 import 'ui/theme.dart';
 
-const appVersion = '0.2.0';
+const appVersion = '0.3.0';
 const _instancePort = 47853; // single-instance socket (not shared with any other app)
 
 Future<void> main(List<String> args) async {
@@ -57,7 +58,7 @@ Future<void> main(List<String> args) async {
     }
   });
 
-  LaunchAtStartup.instance.setup(appName: 'NetMeterApp', appPath: Platform.resolvedExecutable, args: const ['--minimized']);
+  LaunchAtStartup.instance.setup(appName: 'NetMeterApp', appPath: Platform.resolvedExecutable, args: const ['--minimized'], packageName: 'com.netmeter.netmeter');
   final engine = Engine(
     demo: demo,
     version: appVersion,
@@ -126,7 +127,7 @@ class _TrayHost with TrayListener, WindowListener {
   Future<void> init() async {
     windowManager.addListener(this);
     trayManager.addListener(this);
-    final icon = [File(Platform.resolvedExecutable).parent.path, 'data', 'flutter_assets', 'assets', 'tray_icon.ico'].join(Platform.pathSeparator);
+    final icon = trayIconPath();
     if (File(icon).existsSync()) await trayManager.setIcon(icon);
     await trayManager.setToolTip('NetMeter');
     await trayManager.setContextMenu(Menu(items: [

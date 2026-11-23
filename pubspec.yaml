@@ -1,7 +1,7 @@
 name: netmeter
 description: "NetMeter: home network usage monitor for Huawei 5G CPE routers"
 publish_to: 'none'
-version: 0.2.0+1
+version: 0.3.0+1
 
 environment:
   sdk: ^3.13.0
@@ -26,3 +26,4 @@ flutter:
   assets:
     - assets/tray_icon.ico
     - assets/dashboard.html
+    - assets/icon.png

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import 'engine.dart';
 import 'engine_tools.dart';
+import 'platform_utils.dart';
 
 class WebServer {
   WebServer(this.engine);
@@ -35,7 +36,7 @@ class WebServer {
 
   Future<void> open() async {
     if (!running) return;
-    await Process.run('rundll32', ['url.dll,FileProtocolHandler', url]);
+    await openUrl(url);
   }
 
   Future<void> stop() async => _server?.close(force: true);
