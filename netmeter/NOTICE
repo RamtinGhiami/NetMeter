@@ -1,0 +1,44 @@
+NetMeter (اینترنت‌متر)
+Copyright (C) 2026 NetMeter contributors
+License: GNU General Public License v2.0 or later (GPL-2.0-or-later)
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 2 of the License, or (at your option) any later
+version. It is distributed WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+-------------------------------------------------------------------------------
+Third-party components and prior art
+-------------------------------------------------------------------------------
+
+1) CPE-Monitor — https://github.com/DrADCalcium/CPE-Monitor
+   License: GPL-2.0-or-later
+   Use: the Huawei HiLink SCRAM login flow in netmeter/routers/huawei.py
+   (challenge_login / authentication_login, PBKDF2-HMAC-SHA256 parameters,
+   client proof and server signature verification, CSRF token rotation,
+   error-code handling) is a Python port of that project's src/router.rs.
+   Because of this, NetMeter as a whole is distributed under GPL-2.0-or-later.
+
+2) PLDT H153 traffic monitor — https://github.com/ardzeyFTW/...
+   License: MIT
+   Use: reference for the overall architecture (background poller + SQLite +
+   local dashboard + CSV export), not copied verbatim.
+
+3) huawei-lte-api-rs — https://github.com/lvcdy/huawei-lte-api-rs
+   License: MIT
+   Use: field naming reference for the `system/HostInfo` per-device response
+   (MACAddress, ActualName, IPAddress, InterfaceType, TxKBytes, RxKBytes,
+   UpRate, DownRate, Active).
+
+4) huawei-lte-api (Python) — https://github.com/Salamek/huawei-lte-api
+   License: MIT
+   Use: endpoint naming reference for Huawei HiLink APIs.
+
+5) Huawei device WebUI assets (main.js, emui-crypto.js) were inspected locally
+   on the owner's own device solely to confirm the request format and the
+   CryptoJS SCRAM implementation. No vendor code is redistributed here.
+
+Trademarks: Huawei, HiLink, 5G CPE are trademarks of their respective owners.
+This project is not affiliated with or endorsed by Huawei.
