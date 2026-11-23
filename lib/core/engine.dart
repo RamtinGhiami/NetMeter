@@ -56,9 +56,30 @@ class Engine extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    _fixInflatedPcCounters();
     await onAutostart(config.autostart);
     _restartTimer();
     unawaited(tick());
+  }
+
+  /// Version 0.4.0 counted the router's capture download as this PC's traffic. That made today's PC number too big (and, with the
+  /// cap against the router, equal to it). Once, the PC counters of the affected day are cleared so they count correctly from here.
+  void _fixInflatedPcCounters() {
+    if (store.state['pcFix'] == 2) return;
+    store.state['pcFix'] = 2;
+    final day = store.days[dayKey(DateTime.now())];
+    if (day == null) return;
+    day.pcRx = 0;
+    day.pcTx = 0;
+    final local = store.state['localMac'] as String?;
+    if (local != null && store.state['counters'] != true) {
+      final d = day.dev[local];
+      if (d != null) {
+        d.rx = 0;
+        d.tx = 0;
+      }
+    }
+    store.save();
   }
 
   void _restartTimer() {

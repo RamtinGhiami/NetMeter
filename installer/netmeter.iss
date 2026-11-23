@@ -1,6 +1,6 @@
 ; Per-user installer (no administrator rights). Build: ISCC installer\netmeter.iss  (after `flutter build windows --release`)
 #ifndef AppVersion
-#define AppVersion "0.4.1"
+#define AppVersion "0.4.2"
 #endif
 [Setup]
 AppId={{9D4B7E21-6A35-4F0C-8C1E-5B2F7A93D6E8}
