@@ -37,6 +37,8 @@ button{cursor:pointer;background:var(--accent);color:#fff;font-weight:600;border
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:6px}
 .dot.on{background:var(--ok)}
 .note{color:var(--muted);font-size:12.5px;margin-top:10px}
+.nav{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}.nav .sp{flex:1}.nav b{min-width:150px;text-align:center}
+.seg{background:var(--high);color:var(--muted)}.seg.on{background:var(--accent);color:#fff}.arrow{background:var(--high);color:var(--text);font-size:18px;padding:2px 14px}.arrow:disabled{opacity:.35;cursor:default}
 @media (max-width:640px){.row .n{width:100px}.hide-s{display:none}}
 </style>
 </head>
@@ -49,6 +51,13 @@ button{cursor:pointer;background:var(--accent);color:#fff;font-weight:600;border
   <div class="card"><h2>This period</h2><div class="big" id="periodV">–</div><div class="sub" id="periodSub"></div></div>
   <div class="card"><h2>This PC</h2><div class="big" id="pc">–</div><div class="sub" id="pcSub"></div></div>
   <div class="card" id="quotaCard"><h2>Allowance</h2><div class="big" id="quota">–</div><div class="bar"><i id="quotaBar" style="width:0"></i></div><div class="sub" id="quotaSub"></div></div>
+</div>
+<div class="card wide" style="margin-bottom:12px">
+  <h2>Usage by day or month</h2>
+  <div class="nav"><button class="seg on" id="mDay">Day</button><button class="seg" id="mMonth">Month</button><span class="sp"></span><button class="arrow" id="prev">&lsaquo;</button><b id="uTitle"></b><button class="arrow" id="next">&rsaquo;</button></div>
+  <div class="big" id="uTotal">–</div><div class="sub" id="uSub"></div>
+  <canvas id="uBars"></canvas>
+  <div id="uTop"></div>
 </div>
 <div class="grid">
   <div class="card"><h2>Router usage by hour, today</h2><canvas id="hourly"></canvas></div>
@@ -81,7 +90,18 @@ function bars(cv,vals,labels,fmt){
     const x=i*slot+slot*.15,bw=slot*.7;g.beginPath();g.roundRect?g.roundRect(x,14+ch-bh,bw,bh,3):g.rect(x,14+ch-bh,bw,bh);g.fill();
     if(labels[i]!=null){g.fillStyle=css('--muted');g.textAlign='center';g.fillText(labels[i],x+bw/2,h-3);g.textAlign='left'}});
 }
-let state=null,editing=false;
+let state=null,editing=false,uMode='day',uOffset=0;
+async function loadUsage(){
+  const r=await fetch('/api/usage?mode='+uMode+'&offset='+uOffset,{cache:'no-store'});const u=await r.json();
+  $('uTitle').textContent=u.title;$('prev').disabled=!u.older;$('next').disabled=uOffset>=0;
+  $('uTotal').textContent=bytes(u.down+u.up);$('uSub').textContent='Down '+bytes(u.down)+'   Up '+bytes(u.up)+'   This PC '+bytes(u.pc);
+  const lab=u.bars.map((b,i)=>i%(u.bars.length>24?5:3)==0?b.label:null);bars($('uBars'),u.bars.map(b=>b.bytes),lab,bytes);
+  const mx=Math.max(1,...u.top.map(t=>t.value));
+  $('uTop').innerHTML=u.top.map(t=>'<div class="row"><span class="n">'+esc(t.name)+'</span><span class="b"><i style="width:'+(t.value/mx*100)+'%"></i></span><span class="v">'+(u.topIsBytes?bytes(t.value):span(t.value))+'</span></div>').join('');
+}
+function setMode(m){uMode=m;uOffset=0;$('mDay').classList.toggle('on',m=='day');$('mMonth').classList.toggle('on',m=='month');loadUsage()}
+$('mDay').onclick=()=>setMode('day');$('mMonth').onclick=()=>setMode('month');
+$('prev').onclick=()=>{uOffset--;loadUsage()};$('next').onclick=()=>{if(uOffset<0){uOffset++;loadUsage()}};
 function render(s){
   state=s;const st=$('status');st.textContent={connected:'Connected',connecting:'Connecting',blocked:'Paused',offline:'Router unreachable',error:'Error',setup:'Set up needed'}[s.status]||s.status;
   st.className='pill '+({connected:'ok',connecting:'warn',offline:'warn',blocked:'bad',error:'bad'}[s.status]||'warn');
@@ -124,7 +144,7 @@ $('devs').addEventListener('change',async e=>{const tr=e.target.closest('tr');if
   editing=false;render(await r.json())});
 $('export').onclick=async()=>{const r=await fetch('/api/export',{method:'POST',headers:{'X-NetMeter':'1'}});const j=await r.json();alert('CSV files saved to '+j.folder)};
 window.addEventListener('resize',()=>state&&render(state));
-load();setInterval(load,5000);
+load();loadUsage();setInterval(()=>{load();loadUsage()},5000);
 </script>
 </body>
 </html>

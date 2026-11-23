@@ -59,6 +59,76 @@ extension EngineTools on Engine {
     return out;
   }
 
+  /// What the usage explorer shows: one day (bars per hour) or one billing period (bars per day).
+  /// [offset] 0 is today / the current period, -1 the one before, and so on.
+  Map<String, dynamic> usageView({required bool month, required int offset}) {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const short = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (offset > 0) offset = 0;
+    var down = 0, up = 0, pc = 0;
+    final devSecs = <String, int>{}, devBytes = <String, int>{};
+    void addDay(DayStat d) {
+      down += d.wanRx;
+      up += d.wanTx;
+      pc += d.pcRx + d.pcTx;
+      d.dev.forEach((mac, v) {
+        devSecs[mac] = (devSecs[mac] ?? 0) + v.secs;
+        devBytes[mac] = (devBytes[mac] ?? 0) + v.rx + v.tx;
+      });
+    }
+
+    final bars = <Map<String, dynamic>>[];
+    late final String title;
+    late final DateTime from;
+    if (!month) {
+      final t = today;
+      from = DateTime(t.year, t.month, t.day + offset);
+      final d = store.days[dayKey(from)];
+      if (d != null) addDay(d);
+      title = '${weekdays[from.weekday - 1]}, ${from.day} ${short[from.month - 1]} ${from.year}';
+      for (var h = 0; h < 24; h++) {
+        bars.add({'label': '$h', 'bytes': d?.hourly[h] ?? 0});
+      }
+    } else {
+      final reset = config.resetDay;
+      final cur = periodStart;
+      DateTime startOf(int shift) {
+        final first = DateTime(cur.year, cur.month + shift, 1);
+        final last = DateTime(first.year, first.month + 1, 0).day;
+        return DateTime(first.year, first.month, reset > last ? last : reset);
+      }
+
+      from = startOf(offset);
+      final end = startOf(offset + 1);
+      for (var t = from; t.isBefore(end) && !t.isAfter(today); t = DateTime(t.year, t.month, t.day + 1)) {
+        final d = store.days[dayKey(t)];
+        if (d != null) addDay(d);
+        bars.add({'label': '${t.day}', 'bytes': d == null ? 0 : d.wanRx + d.wanTx});
+      }
+      title = reset == 1
+          ? '${months[from.month - 1]} ${from.year}'
+          : '${short[from.month - 1]} ${from.day} to ${short[end.month - 1]} ${end.subtract(const Duration(days: 1)).day}, ${end.year}';
+    }
+    final byBytes = perDeviceUsage;
+    final ranked = (byBytes ? devBytes : devSecs).entries.where((e) => e.value > 0).toList()..sort((a, b) => b.value.compareTo(a.value));
+    final fromKey = dayKey(from);
+    return {
+      'title': title,
+      'kind': month ? 'days' : 'hours',
+      'offset': offset,
+      'older': store.days.keys.any((k) => k.compareTo(fromKey) < 0),
+      'down': down,
+      'up': up,
+      'pc': pc,
+      'bars': bars,
+      'topIsBytes': byBytes,
+      'top': [
+        for (final e in ranked.take(6)) {'name': store.devices[e.key]?.display ?? e.key, 'value': e.value},
+      ],
+    };
+  }
+
   /// Router bytes for each hour of today.
   List<int> get hourlyToday => store.days[dayKey(DateTime.now())]?.hourly ?? List.filled(24, 0);
 

@@ -15,8 +15,10 @@ Everything stays on your PC. Nothing is sent anywhere.
 
 ## What it shows
 
-- **Router usage:** today, this billing period, live speed, usage by hour, and the last 14 or 30 days. The numbers come
-  from the router itself, so they are exact.
+- **Router usage:** today, this billing period, live speed and usage by month. The numbers come from the router itself,
+  so they are exact.
+- **Day and month filter:** step back and forward through any day (bars per hour) or any month (bars per day) and see
+  its totals, this PC and the most active devices.
 - **This PC:** how much this computer used, measured from the Windows network adapter counters.
 - **Allowance and forecast:** set a monthly allowance in GB, see a bar, a forecast for the end of the period, and get
   alerts at 80, 90 and 100 percent.

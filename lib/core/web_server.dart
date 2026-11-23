@@ -58,6 +58,11 @@ class WebServer {
       if (host != '127.0.0.1' && host != 'localhost') return _send(r.response, 403, 'text/plain', 'forbidden');
       final path = r.uri.path;
       if (r.method == 'GET' && path == '/') return _send(r.response, 200, 'text/html', _html);
+      if (r.method == 'GET' && path == '/api/usage') {
+        final month = r.uri.queryParameters['mode'] == 'month';
+        final offset = int.tryParse(r.uri.queryParameters['offset'] ?? '') ?? 0;
+        return _send(r.response, 200, 'application/json', jsonEncode(engine.usageView(month: month, offset: offset)));
+      }
       if (r.method == 'GET' && path == '/api/state') return _send(r.response, 200, 'application/json', jsonEncode(engine.stateJson()));
       if (r.method == 'POST' && r.headers.value('x-netmeter') == '1') {
         if (path == '/api/device') {

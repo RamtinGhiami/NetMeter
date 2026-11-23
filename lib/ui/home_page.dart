@@ -4,6 +4,7 @@ import '../core/engine.dart';
 import '../core/engine_tools.dart';
 import '../core/web_server.dart';
 import 'theme.dart';
+import 'usage_explorer.dart';
 import 'widgets.dart';
 
 /// Overview: connection state, router usage today and this period, this PC, and a 14-day chart.
@@ -86,11 +87,7 @@ class HomePage extends StatelessWidget {
                 _quotaCard(context),
                 const SizedBox(height: 12),
               ],
-              InfoCard(
-                title: 'Router usage by hour, today',
-                icon: Icons.schedule_rounded,
-                child: SizedBox(height: 120, child: CustomPaint(painter: _BarsPainter([for (var h = 0; h < 24; h++) (DateTime(2000, 1, 1, h), engine.hourlyToday[h])], hours: true), size: Size.infinite)),
-              ),
+              UsageExplorer(engine: engine),
               const SizedBox(height: 12),
               InfoCard(
                 title: 'Router usage by month',
@@ -172,9 +169,9 @@ const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 String _date(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 class _BarsPainter extends CustomPainter {
-  _BarsPainter(this.data, {this.hours = false, this.months = false});
+  _BarsPainter(this.data, {this.months = false});
   final List<(DateTime, int)> data;
-  final bool hours, months;
+  final bool months;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -188,9 +185,9 @@ class _BarsPainter extends CustomPainter {
       final h = data[i].$2 == 0 ? 3.0 : (data[i].$2 / maxV * (chartH - 14)).clamp(3.0, chartH);
       final rect = RRect.fromRectAndRadius(Rect.fromLTWH(i * slot + slot * 0.18, chartH - h, slot * 0.64, h), const Radius.circular(4));
       canvas.drawRRect(rect, data[i].$2 == 0 ? dim : bar);
-      if (months || (hours ? i % 3 == 0 : (i == data.length - 1 || i % 3 == 0))) {
+      if (months || i == data.length - 1 || i % 3 == 0) {
         final tp = TextPainter(
-          text: TextSpan(text: months ? _monthNames[data[i].$1.month - 1] : (hours ? '${data[i].$1.hour}' : '${data[i].$1.day}'), style: const TextStyle(color: Palette.muted, fontSize: 10)),
+          text: TextSpan(text: months ? _monthNames[data[i].$1.month - 1] : '${data[i].$1.day}', style: const TextStyle(color: Palette.muted, fontSize: 10)),
           textDirection: TextDirection.ltr,
         )..layout();
         tp.paint(canvas, Offset(i * slot + (slot - tp.width) / 2, chartH + 3));
