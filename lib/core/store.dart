@@ -12,10 +12,14 @@ String dayKey(DateTime t) => '${t.year.toString().padLeft(4, '0')}-${t.month.toS
 Directory dataDir() => appDataDir();
 
 class Config {
-  Config({this.host = '192.168.70.1', this.username = 'Admin', this.password = '', this.intervalSec = 20, this.resetDay = 1, this.autostart = true, this.quotaGb = 0});
+  Config({this.host = '192.168.70.1', this.username = 'Admin', this.password = '', this.intervalSec = 20, this.resetDay = 1, this.autostart = true, this.quotaGb = 0, this.deviceSampling = false, this.sampleEverySec = 120});
   String host, username, password;
   int intervalSec, resetDay, quotaGb; // quotaGb 0 = no monthly allowance set
   bool autostart;
+
+  /// Estimate the usage of each device with short packet captures on the router (off by default).
+  bool deviceSampling;
+  int sampleEverySec;
 
   static File get _file => File('${dataDir().path}${Platform.pathSeparator}config.json');
 
@@ -29,6 +33,8 @@ class Config {
       c.resetDay = (j['resetDay'] ?? c.resetDay) as int;
       c.autostart = j['autostart'] ?? c.autostart;
       c.quotaGb = (j['quotaGb'] ?? 0) as int;
+      c.deviceSampling = j['deviceSampling'] ?? false;
+      c.sampleEverySec = (j['sampleEverySec'] ?? 120) as int;
       final enc = j['password'] as String?;
       if (enc != null && enc.isNotEmpty) c.password = unprotectSecret(enc) ?? '';
     } catch (_) {}
@@ -45,6 +51,8 @@ class Config {
       'resetDay': resetDay,
       'autostart': autostart,
       'quotaGb': quotaGb,
+      'deviceSampling': deviceSampling,
+      'sampleEverySec': sampleEverySec,
     }));
     restrictToOwner(_file); // Linux/macOS: the file holds the password, keep it private
   }

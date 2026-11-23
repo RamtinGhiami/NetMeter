@@ -175,6 +175,7 @@ extension EngineTools on Engine {
       'status': status,
       'error': error,
       'perDeviceUsage': perDeviceUsage,
+      'estimated': estimated,
       'periodStart': dayKey(periodStart),
       'rate': {'down': wan?.downRate ?? 0, 'up': wan?.upRate ?? 0},
       'today': {'down': todayWan.$1, 'up': todayWan.$2},

@@ -22,7 +22,8 @@ Everything stays on your PC. Nothing is sent anywhere.
 - **This PC:** how much this computer used, measured from the Windows network adapter counters.
 - **Allowance and forecast:** set a monthly allowance in GB, see a bar, a forecast for the end of the period, and get
   alerts at 80, 90 and 100 percent.
-- **Devices:** every device the router has seen, online or offline, and how long it was online today and this period.
+- **Devices:** every device the router has seen, online or offline, how long it was online, and (optional) an estimate
+  of its usage.
   Give each device a **name** and a **category** (Phone, Computer, Tablet, TV, Console, Smart home, Guest, Other).
 - **New device alert** when something you have not seen before joins the network.
 - **Browser dashboard:** the same data in your browser (`http://127.0.0.1:47854/`), with the same device editing.
@@ -32,17 +33,23 @@ Everything stays on your PC. Nothing is sent anywhere.
 
 <p align="center"><img src="docs/web.png" width="85%" alt="Browser dashboard"></p>
 
-## Important: per-device traffic
+## Usage per device
 
 The Huawei web API has fields for the traffic of each device (`system/HostInfo`, `TxKBytes` and `RxKBytes`), but the
 H155-383 firmware fills them with zeros even while a device downloads at full speed. NetMeter handles this on its own:
 
 - If your router reports real per-device counters, NetMeter records them and shows usage per device.
-- If it does not (like the H155-383), devices show **connection time** instead, and the PC NetMeter runs on shows its own
-  measured traffic. The router total is always exact.
+- If it does not (like the H155-383), devices show **connection time**, and the PC NetMeter runs on shows its own exact
+  traffic. The router total is always exact.
+- **Optional estimate (Settings, "Usage per device"):** the router has a developer packet capture. NetMeter switches it on
+  for about 20 seconds every 1, 2 or 5 minutes, reads **only the addresses and sizes** of the packets (nothing else is
+  kept and nothing is stored from the capture), and shares the exact router total among the devices in the proportion it
+  saw. Every device on the router, Wi-Fi or cable, is included. Estimated numbers are marked with `~`.
 
-The router also has a hidden packet capture tool (developer mode). Using it for continuous accounting is not
-implemented: captures are short and the router encrypts the request bodies of that page.
+How good is the estimate? Long uses (streaming, downloads, calls) come out well, because they are present in most
+captures. A short burst that happens entirely between two captures can be missed, and its bytes are then shared among
+whoever was active at the next capture. This PC is always exact (it uses the Windows counters). The total never changes.
+The capture adds some load to the router while it runs, so the option is off by default.
 
 ## Download and install
 

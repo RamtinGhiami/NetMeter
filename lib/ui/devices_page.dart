@@ -35,7 +35,7 @@ class DevicesPage extends StatelessWidget {
 
   Widget _tile(BuildContext context, Device d) {
     final s = engine.deviceStats(d.mac);
-    final usage = (engine.perDeviceUsage || d.isLocal) ? '${formatBytes(s.bytesToday)} today' : 'online ${formatSpan(s.secsToday)} today';
+    final usage = (engine.perDeviceUsage || d.isLocal) ? '${engine.estimated && !d.isLocal ? '~' : ''}${formatBytes(s.bytesToday)} today' : 'online ${formatSpan(s.secsToday)} today';
     return InfoCard(
       onTap: () => _edit(context, d),
       padding: const EdgeInsets.all(12),

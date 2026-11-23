@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import 'engine_tools.dart';
 import 'huawei_client.dart';
+import 'pcap.dart';
 import 'store.dart';
 import 'platform_utils.dart';
 
@@ -68,6 +69,7 @@ class Engine extends ChangeNotifier {
   Future<void> shutdown() async {
     _timer?.cancel();
     store.save();
+    if (config.deviceSampling) await _client?.stopCapture(); // never leave the router capturing
     await _client?.logout();
     _client?.close();
   }
@@ -80,7 +82,7 @@ class Engine extends ChangeNotifier {
 
   // ---- settings ----------------------------------------------------------
 
-  Future<void> applySettings({required String host, required String username, required String password, required int intervalSec, required int resetDay, required bool autostart, int quotaGb = 0}) async {
+  Future<void> applySettings({required String host, required String username, required String password, required int intervalSec, required int resetDay, required bool autostart, int quotaGb = 0, bool deviceSampling = false, int sampleEverySec = 120}) async {
     final credentialsChanged = host != config.host || username != config.username || password != config.password;
     config
       ..host = host.trim()
@@ -89,7 +91,9 @@ class Engine extends ChangeNotifier {
       ..intervalSec = intervalSec
       ..resetDay = resetDay
       ..autostart = autostart
-      ..quotaGb = quotaGb;
+      ..quotaGb = quotaGb
+      ..deviceSampling = deviceSampling
+      ..sampleEverySec = sampleEverySec;
     config.save();
     await onAutostart(autostart);
     _restartTimer();
@@ -178,6 +182,8 @@ class Engine extends ChangeNotifier {
     final day = store.day(now);
     day.pcRx += rx;
     day.pcTx += tx;
+    _pend(2, rx);
+    _pend(3, tx);
     // the router gives no per-device counters, so the device that is this PC gets its own measured traffic
     final local = store.state['localMac'] as String?;
     if (local != null && store.state['counters'] != true) {
@@ -227,6 +233,7 @@ class Engine extends ChangeNotifier {
       status = 'connected';
       error = null;
       lastOk = now;
+      _maybeSample(now, client);
     } on RouterError catch (e) {
       error = e.message;
       log('router error at $stage (${e.kind}/${e.code}): ${e.message}');
@@ -254,6 +261,79 @@ class Engine extends ChangeNotifier {
     }
   }
 
+  // ---- per-device estimate from short packet captures --------------------------------------------------------
+
+  bool _sampling = false;
+  DateTime? _lastSample;
+  DateTime? _sampleBackoffUntil;
+  int _sampleFails = 0;
+
+  /// Router bytes (down, up) and this PC's bytes (down, up) counted since the last time they were shared out among devices.
+  void _pend(int i, int v) {
+    final p = (store.state['pend'] as List?)?.cast<int>() ?? [0, 0, 0, 0];
+    p[i] += v;
+    store.state['pend'] = p;
+  }
+
+  void _maybeSample(DateTime now, HuaweiClient client) {
+    if (!config.deviceSampling || _sampling) return;
+    if (_sampleBackoffUntil != null && now.isBefore(_sampleBackoffUntil!)) return;
+    if (_lastSample != null && now.difference(_lastSample!) < Duration(seconds: config.sampleEverySec.clamp(60, 900))) return;
+    _sampling = true;
+    unawaited(_runSample(client).whenComplete(() => _sampling = false));
+  }
+
+  Future<void> _runSample(HuaweiClient client) async {
+    final parts = config.host.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    if (parts.length != 4) return;
+    final counter = PcapCounter(lanPrefix24: (parts[0] << 16) | (parts[1] << 8) | parts[2]);
+    try {
+      await client.capture(const Duration(seconds: 20), counter.add, abort: () => counter.full);
+      _lastSample = DateTime.now();
+      _sampleFails = 0;
+      _share(counter);
+      notifyListeners();
+    } catch (e) {
+      _sampleFails++;
+      final wait = Duration(minutes: (1 << _sampleFails.clamp(1, 5)).clamp(2, 30));
+      _sampleBackoffUntil = DateTime.now().add(wait);
+      log('capture sample failed ($_sampleFails): $e; next try in ${wait.inMinutes} min');
+      if (_sampleFails == 3) notice = 'Per-device estimates are not working on this router: $e';
+    }
+  }
+
+  /// Shares what the router counted since the last sample, minus what this PC measured itself, among the other devices in the
+  /// proportion seen in the capture. If the capture saw almost nothing, the bytes wait for the next one.
+  void _share(PcapCounter c) {
+    final p = (store.state['pend'] as List?)?.cast<int>() ?? [0, 0, 0, 0];
+    final ipToMac = {for (final h in hosts) h.ip: h.mac};
+    final local = store.state['localMac'] as String?;
+    final dn = <String, int>{}, up = <String, int>{};
+    c.down.forEach((ip, b) {
+      final mac = ipToMac[PcapCounter.ipString(ip)];
+      if (mac != null && mac != local) dn[mac] = (dn[mac] ?? 0) + b;
+    });
+    c.up.forEach((ip, b) {
+      final mac = ipToMac[PcapCounter.ipString(ip)];
+      if (mac != null && mac != local) up[mac] = (up[mac] ?? 0) + b;
+    });
+    final seenDn = dn.values.fold<int>(0, (a, b) => a + b), seenUp = up.values.fold<int>(0, (a, b) => a + b);
+    if (seenDn + seenUp < 50 * 1024) return; // too little seen to tell who used it
+    var othersDn = p[0] - p[2] > 0 ? p[0] - p[2] : 0, othersUp = p[1] - p[3] > 0 ? p[1] - p[3] : 0;
+    final day = store.day(DateTime.now());
+    if (seenDn > 0) {
+      dn.forEach((mac, b) => day.devDay(mac).rx += (othersDn * b / seenDn).round());
+      othersDn = 0;
+    }
+    if (seenUp > 0) {
+      up.forEach((mac, b) => day.devDay(mac).tx += (othersUp * b / seenUp).round());
+      othersUp = 0;
+    }
+    // a direction nobody was seen in keeps waiting; the rest of the pools is used up
+    store.state['pend'] = [othersDn, othersUp, 0, 0];
+    store.state['sampling'] = true;
+  }
+
   void _record(DateTime now, List<HostRecord> list, WanStat w) {
     final day = store.day(now);
     final dt = _lastPoll == null ? 0 : now.difference(_lastPoll!).inSeconds.clamp(0, 120);
@@ -270,6 +350,8 @@ class Engine extends ChangeNotifier {
         day.wanRx += rx;
         day.wanTx += tx;
         day.hourly[now.hour] += rx + tx;
+        _pend(0, rx);
+        _pend(1, tx);
       }
     }
     store.state['wan'] = [w.totalRx, w.totalTx];
@@ -319,7 +401,10 @@ class Engine extends ChangeNotifier {
 
   // ---- numbers for the UI ------------------------------------------------
 
-  bool get perDeviceUsage => store.state['counters'] == true;
+  bool get perDeviceUsage => store.state['counters'] == true || store.state['sampling'] == true;
+
+  /// True when the per-device numbers are estimates made from short packet captures.
+  bool get estimated => store.state['counters'] != true && store.state['sampling'] == true;
 
   /// Sum over the days from [from] (inclusive) to today.
   (int, int) sumWan(DateTime from) => _sum(from, (d) => (d.wanRx, d.wanTx));

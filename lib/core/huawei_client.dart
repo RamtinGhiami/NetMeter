@@ -4,6 +4,7 @@
 // (https://github.com/, GPL-2.0-or-later) and was checked against the router's own CryptoJS code
 // (see test/scram_test.dart). Huawei's HMAC argument order is NOT standard SCRAM: the label or the
 // auth message is the HMAC key.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -117,7 +118,7 @@ class HuaweiClient {
 
   void close() => _http.close(force: true);
 
-  Future<(int, Map<String, String>, String)> _send(String method, String path, {String? body}) async {
+  Future<(int, Map<String, String>, String)> _send(String method, String path, {String? body, String? contentType, Map<String, String>? extra}) async {
     try {
       final req = await _http.openUrl(method, Uri.parse('$_base$path'));
       req.followRedirects = true;
@@ -127,10 +128,11 @@ class HuaweiClient {
         ..set('Origin', _base)
         ..set('X-Requested-With', 'XMLHttpRequest')
         ..set('_ResponseSource', 'Broswer');
+      extra?.forEach(req.headers.set);
       if (_tokens.isNotEmpty) req.headers.set('__RequestVerificationToken', _tokens.first);
       if (_cookies.isNotEmpty) req.headers.set('Cookie', _cookies.entries.map((e) => '${e.key}=${e.value}').join('; '));
       if (body != null) {
-        req.headers.set('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+        req.headers.set('Content-Type', contentType ?? 'application/x-www-form-urlencoded; charset=UTF-8');
         req.add(utf8.encode(body));
       }
       final res = await req.close().timeout(const Duration(seconds: 15));
@@ -209,6 +211,76 @@ class HuaweiClient {
     final (status, _, body) = await _send('POST', '/api/$path', body: xml);
     if (status >= 400) throw RouterError('http$status', 'The router answered HTTP $status', 'network');
     return _parse(body);
+  }
+
+  /// Turns the router's packet capture on or off (a developer feature of the web panel).
+  Future<void> setCapture(bool on) async {
+    final body = jsonEncode({
+      'data': {'Enable': on, 'EffectTime': 15, 'Port': 'ethwan_lan_wifi', 'OtherEffectTime': 15},
+    });
+    final (status, _, text) = await _send('POST', '/api/ntwk/ipcapture', body: body, contentType: 'application/json;charset=UTF-8', extra: {'_ResponseFormat': 'JSON'});
+    if (status >= 400) throw RouterError('http$status', 'The router answered HTTP $status', 'network');
+    final r = _parse(text);
+    if (r is Map && r['errcode'] != null && '${r['errcode']}' != '0') {
+      throw RouterError('${r['errcode']}', 'The router refused the packet capture (${r['errcode']})', 'error');
+    }
+  }
+
+  /// Runs one packet capture of about [window] and hands the pcap bytes to [onData] as they arrive. The router stops the capture
+  /// when it is switched off, which also ends the download. [abort] can end it early. The capture is always switched off again.
+  Future<void> capture(Duration window, void Function(List<int>) onData, {bool Function()? abort}) async {
+    await setCapture(true);
+    var stopped = false;
+    Future<void> stop() async {
+      if (stopped) return;
+      stopped = true;
+      try {
+        await setCapture(false);
+      } catch (_) {}
+    }
+
+    try {
+      final req = await _http.openUrl('GET', Uri.parse('$_base/api/ntwk/ipcapturestart'));
+      req.headers
+        ..set('Referer', '$_base/')
+        ..set('Origin', _base)
+        ..set('X-Requested-With', 'XMLHttpRequest')
+        ..set('_ResponseSource', 'Broswer');
+      if (_tokens.isNotEmpty) req.headers.set('__RequestVerificationToken', _tokens.first);
+      if (_cookies.isNotEmpty) req.headers.set('Cookie', _cookies.entries.map((e) => '${e.key}=${e.value}').join('; '));
+      final res = await req.close();
+      if (res.statusCode != 200) throw RouterError('http${res.statusCode}', 'The capture download failed (HTTP ${res.statusCode})', 'network');
+      final done = Completer<void>();
+      final sub = res.listen(
+        (c) {
+          onData(c);
+          if (abort?.call() == true) unawaited(stop());
+        },
+        onDone: () => done.isCompleted ? null : done.complete(),
+        onError: (Object e) => done.isCompleted ? null : done.completeError(e),
+        cancelOnError: true,
+      );
+      final timer = Timer(window, () => unawaited(stop()));
+      try {
+        await done.future.timeout(window + const Duration(seconds: 25));
+      } finally {
+        timer.cancel();
+        await sub.cancel();
+      }
+    } on RouterError {
+      rethrow;
+    } catch (e) {
+      if (e is FormatException) rethrow;
+      throw RouterError('network', 'The packet capture failed (${e.runtimeType})', 'network');
+    } finally {
+      await stop();
+    }
+  }
+
+  Future<void> stopCapture() async {
+    try {
+      await setCapture(false);
+    } catch (_) {}
   }
 
   Map<String, dynamic> _map(Object o) => o is Map<String, dynamic> ? o : <String, dynamic>{};

@@ -24,6 +24,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late int _interval = widget.engine.config.intervalSec;
   late int _resetDay = widget.engine.config.resetDay;
   late bool _autostart = widget.engine.config.autostart;
+  late bool _sampling = widget.engine.config.deviceSampling;
+  late int _sampleEvery = widget.engine.config.sampleEverySec;
   bool _show = false;
 
   @override
@@ -94,7 +96,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Expanded(
               child: FilledButton(
                 onPressed: () async {
-                  await e.applySettings(host: _host.text, username: _user.text, password: _pass.text, intervalSec: _interval, resetDay: _resetDay, autostart: _autostart, quotaGb: int.tryParse(_quota.text) ?? 0);
+                  await e.applySettings(host: _host.text, username: _user.text, password: _pass.text, intervalSec: _interval, resetDay: _resetDay, autostart: _autostart, quotaGb: int.tryParse(_quota.text) ?? 0, deviceSampling: _sampling, sampleEverySec: _sampleEvery);
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved')));
                 },
                 child: const Text('Save and connect'),
@@ -103,6 +105,29 @@ class _SettingsPageState extends State<SettingsPage> {
             if (e.authBlocked) ...[
               const SizedBox(width: 10),
               OutlinedButton(onPressed: e.retryLogin, child: const Text('Try again')),
+            ],
+          ]),
+        ),
+        const SizedBox(height: 12),
+        InfoCard(
+          title: 'Usage per device (estimate)',
+          icon: Icons.devices_other_rounded,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ToggleTile(title: 'Estimate usage per device', subtitle: 'Uses short packet captures on the router', value: _sampling, onChanged: (v) => setState(() => _sampling = v)),
+            const SizedBox(height: 8),
+            Text(
+              'Your router does not report traffic per device. With this on, NetMeter switches the router\'s developer packet capture on for about 20 seconds at a time, reads only the addresses and sizes of the packets (nothing else is kept), and shares the exact router total among the devices in the proportion it saw. Every device on the router, Wi-Fi or cable, is included. Long uses (video, downloads) come out well; very short bursts between two captures can be missed. This PC always uses its own exact counters.',
+              style: text.bodySmall,
+            ),
+            if (_sampling) ...[
+              const SizedBox(height: 10),
+              Text('Capture every', style: text.bodySmall),
+              const SizedBox(height: 6),
+              Segmented<int>(
+                value: _sampleEvery,
+                onChanged: (v) => setState(() => _sampleEvery = v),
+                options: const [(60, '1 min', Icons.bolt_rounded), (120, '2 min', Icons.timer_rounded), (300, '5 min', Icons.timer_outlined)],
+              ),
             ],
           ]),
         ),
